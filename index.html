@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lokomotive Map – München Ost Rbf</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #0e1116; color: #e6ecf2; }
+  #viewport { position: fixed; inset: 0; }
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px;
+    display: flex; align-items: center; gap: 16px; padding: 0 20px;
+    background: rgba(16,20,26,0.85); backdrop-filter: blur(10px);
+    border-bottom: 1px solid #1d2530; z-index: 10;
+  }
+  .logo { font-weight: 700; font-size: 18px; }
+  .subtitle { opacity: 0.6; font-size: 13px; }
+  .view-toggle { margin-left: auto; display: flex; gap: 6px; }
+  .view-toggle button {
+    background: #1d2530; color: #9aa6b3; border: 1px solid #2a3444;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  .view-toggle button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .panel {
+    position: fixed; z-index: 10;
+    background: rgba(16,20,26,0.92); backdrop-filter: blur(10px);
+    border: 1px solid #1d2530; border-radius: 12px; padding: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    min-width: 260px;
+  }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; margin-bottom: 12px; }
+  .panel h3 { font-size: 12px; text-transform: uppercase; opacity: 0.6; margin-bottom: 8px; }
+  #routePanel { top: 80px; left: 20px; }
+  #navPanel { top: 80px; right: 20px; width: 320px; max-height: calc(100vh - 100px); overflow-y: auto; }
+  #camPanel { bottom: 20px; left: 20px; min-width: 160px; }
+  #camPanel button {
+    display: block; width: 100%; margin-bottom: 6px;
+    background: #1d2530; color: #cdd6e0; border: 1px solid #2a3444;
+    padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  #camPanel button:hover { background: #2a3444; }
+  .hidden { display: none !important; }
+  label { display: block; font-size: 12px; opacity: 0.8; margin-bottom: 12px; }
+  select, input[type="range"] {
+    width: 100%; margin-top: 6px;
+    background: #11161c; color: #e6ecf2; border: 1px solid #2a3444;
+    padding: 8px; border-radius: 6px; font-size: 13px;
+  }
+  input[type="range"] { padding: 0; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  button.primary {
+    flex: 1; background: #2563eb; color: #fff; border: none;
+    padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 600;
+  }
+  button.primary:hover { background: #1d4ed8; }
+  button.ghost {
+    flex: 1; background: transparent; color: #9aa6b3;
+    border: 1px solid #2a3444; padding: 10px; border-radius: 6px; cursor: pointer;
+  }
+  button.ghost:hover { background: #1d2530; }
+  #navPanel .row button { font-size: 12px; padding: 8px; }
+  #navSteps { margin-bottom: 12px; }
+  .step {
+    display: flex; align-items: flex-start; gap: 8px; padding: 8px;
+    border-radius: 6px; font-size: 12px; margin-bottom: 4px;
+    background: #11161c; border-left: 3px solid #2a3444;
+  }
+  .step.active { background: #14304d; border-left-color: #3b82f6; }
+  .step.done { opacity: 0.55; border-left-color: #22c55e; }
+  .step .idx { font-weight: 700; opacity: 0.5; }
+  .slider-row { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-bottom: 10px; }
+  .slider-row label { flex: 0 0 auto; margin: 0; opacity: 0.7; }
+  .slider-row input { flex: 1; }
+  .status {
+    font-size: 12px; padding: 8px; border-radius: 6px;
+    background: #11161c; color: #9aa6b3; text-align: center;
+  }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #0e1116; color: #9aa6b3; font-size: 14px; z-index: 100;
+    transition: opacity 0.4s;
+  }
+  #loading.fade { opacity: 0; pointer-events: none; }
+
+@media (max-width: 900px) {
+ #topbar {height:48px;padding:0 8px;gap:6px} .logo{font-size:14px} .subtitle{display:none} .view-toggle button{padding:6px;font-size:11px}
+ .panel{min-width:0;padding:8px;border-radius:8px} #routePanel{top:54px;left:6px;width: min(210px,46vw)} #navPanel{top:54px;right:6px;width:min(260px,48vw);max-height:55vh} #camPanel{bottom:8px;left:6px;display:flex;gap:4px;align-items:center} #camPanel h3{display:none} #camPanel button{margin:0;width:auto;padding:8px} .panel h2{font-size:11px;margin-bottom:6px} label{margin-bottom:6px} .row{flex-wrap:wrap;gap:4px} button.primary,button.ghost{padding:7px;font-size:11px} #navSteps{max-height:22vh;overflow:auto} .step{padding:4px;font-size:11px} }
+</style>
+</head>
+<body>
+<div id="viewport"></div>
+<header id="topbar">
+  <div class="logo">🚂 Lokomotive Map</div>
+  <div class="subtitle">München Ost Rbf · Demo (fiktive Gleise)</div>
+  <div class="view-toggle">
+    <button id="btnRealistic" class="active">Realistic</button>
+    <button id="btnTechnical">Technical</button>
+  </div>
+</header>
+<aside id="routePanel" class="panel">
+  <h2>Route planen</h2>
+  <label>Startpunkt (Gleis)<select id="startSelect"></select></label>
+  <label>Zielpunkt (Gleis)<select id="endSelect"></select></label>
+  <div class="row">
+    <button id="btnRoute" class="primary">Route berechnen</button>
+    <button id="btnReset" class="ghost">Zurücksetzen</button>
+  </div>
+</aside>
+<aside id="navPanel" class="panel hidden">
+  <h2>Navigation</h2>
+  <div id="navSteps"></div>
+  <div class="row">
+    <button id="btnSim" class="primary">Simulation starten</button>
+    <button id="btnStop" class="ghost">Stop</button>
+  </div>
+  <div class="row">
+    <button id="btnPrev">◀ Schritt</button>
+    <button id="btnNext">Schritt ▶</button>
+  </div>
+  <div class="slider-row">
+    <label>Geschwindigkeit</label>
+    <input type="range" id="speedRange" min="0.2" max="3" step="0.1" value="1">
+  </div>
+  <div id="navStatus" class="status"></div>
+</aside>
+<aside id="camPanel" class="panel">
+  <h3>Kamera</h3>
+  <button data-cam="iso">Isometric</button>
+  <button data-cam="top">Top View</button>
+  <button data-cam="follow">Follow Loco</button>
+</aside>
+<div id="loading">Lade München Ost Rbf…</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ SCENE ============
+const viewport = document.getElementById('viewport');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+scene.fog = new THREE.Fog(0x0e1116, 120, 400);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 2000);
+camera.position.set(60, 60, 80);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia("(pointer: coarse)").matches ? 1 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = !matchMedia("(pointer: coarse)").matches;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+viewport.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI / 2.05;
+
+// ============ LIGHTS ============
+scene.add(new THREE.HemisphereLight(0x9db9ff, 0x1a1f26, 0.9));
+const sun = new THREE.DirectionalLight(0xfff3d6, 1.4);
+sun.position.set(60, 100, 40);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const s = 120;
+sun.shadow.camera.left = -s; sun.shadow.camera.right = s;
+sun.shadow.camera.top = s; sun.shadow.camera.bottom = -s;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 300;
+scene.add(sun);
+
+// ============ GROUND ============
+const groundGeo = new THREE.PlaneGeometry(400, 400);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x1c232c, roughness: 0.95 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const ballastMat = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 1 });
+
+// ============ DATA ============
+const GLEISE = [
+  { id: 'G1', nummer: 'Gleis 1', start: [-60, -30], end: [60, -30] },
+  { id: 'G2', nummer: 'Gleis 2', start: [-60, -20], end: [60, -20] },
+  { id: 'G3', nummer: 'Gleis 3', start: [-60, -10], end: [60, -10] },
+  { id: 'G4', nummer: 'Gleis 4', start: [-60,   0], end: [60,   0] },
+  { id: 'G5', nummer: 'Gleis 5', start: [-60,  10], end: [60,  10] },
+  { id: 'G6', nummer: 'Gleis 6', start: [-60,  20], end: [60,  20] },
+  { id: 'G7', nummer: 'Gleis 7', start: [-60,  30], end: [60,  30] },
+];
+const WEICHEN = [
+  { id: 'W1', nummer: 'W1', from: 'G1', to: 'G2', at: [-40, -25] },
+  { id: 'W2', nummer: 'W2', from: 'G2', to: 'G3', at: [-20, -15] },
+  { id: 'W3', nummer: 'W3', from: 'G3', to: 'G4', at: [  0,  -5] },
+  { id: 'W4', nummer: 'W4', from: 'G4', to: 'G5', at: [ 20,   5] },
+  { id: 'W5', nummer: 'W5', from: 'G5', to: 'G6', at: [ 40,  15] },
+  { id: 'W6', nummer: 'W6', from: 'G6', to: 'G7', at: [ 55,  25] },
+  { id: 'W7', nummer: 'W7', from: 'G2', to: 'G4', at: [  0, -10] },
+  { id: 'W8', nummer: 'W8', from: 'G4', to: 'G6', at: [ 20,  10] },
+];
+
+// ============ RAILS ============
+const railMaterial = new THREE.MeshStandardMaterial({ color: 0x8a96a3, metalness: 0.7, roughness: 0.35 });
+const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.9 });
+const railGroup = new THREE.Group();
+scene.add(railGroup);
+
+function buildGleis(g) {
+  const [x1, z1] = g.start, [x2, z2] = g.end;
+  const dx = x2-x1, dz = z2-z1;
+  const len = Math.hypot(dx, dz);
+  const ang = Math.atan2(dz, dx);
+  const group = new THREE.Group();
+  group.position.set((x1+x2)/2, 0, (z1+z2)/2);
+  group.rotation.y = -ang;
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(len, 0.3, 2.2), ballastMat);
+  ballast.position.y = 0.15;
+  ballast.receiveShadow = true;
+  group.add(ballast);
+  const sc = Math.floor(len / 1.5);
+  const sleepers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.12, 1.8), sleeperMaterial, sc);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < sc; i++) {
+    const t = (i + 0.5) / sc;
+    m.makeTranslation(-len/2 + t*len, 0.34, 0);
+    sleepers.setMatrixAt(i, m);
+  }
+  sleepers.castShadow = true;
+  group.add(sleepers);
+  const railGeo = new THREE.BoxGeometry(len, 0.12, 0.12);
+  const r1 = new THREE.Mesh(railGeo, railMaterial);
+  r1.position.set(0, 0.42, -0.6);
+  r1.castShadow = true;
+  group.add(r1);
+  const r2 = r1.clone();
+  r2.position.z = 0.6;
+  group.add(r2);
+  railGroup.add(group);
+}
+GLEISE.forEach(buildGleis);
+
+// ============ WEICHEN ============
+const weicheGroup = new THREE.Group();
+scene.add(weicheGroup);
+const weicheMat = new THREE.MeshStandardMaterial({ color: 0xffb703, emissive: 0x553300, emissiveIntensity: 0.5 });
+const weicheMeshes = {};
+
+function makeLabel(text, color = '#ffffff') {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = color;
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(8, 2, 1);
+  return sp;
+}
+
+WEICHEN.forEach(w => {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 16), weicheMat);
+  mesh.position.set(w.at[0], 0.6, w.at[1]);
+  mesh.castShadow = true;
+  weicheGroup.add(mesh);
+  weicheMeshes[w.id] = mesh;
+  const lbl = makeLabel(w.nummer, '#ffb703');
+  lbl.position.set(w.at[0], 2.5, w.at[1]);
+  weicheGroup.add(lbl);
+});
+
+GLEISE.forEach(g => {
+  const lbl = makeLabel(g.nummer, '#8ecbff');
+  lbl.position.set(g.end[0] - 6, 2.5, g.end[1]);
+  scene.add(lbl);
+});
+
+// ============ SIGNALS ============
+function buildSignal(x, z, color = 0x22c55e) {
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.15, 4, 8),
+    new THREE.MeshStandardMaterial({ color: 0x333a44 })
+  );
+  pole.position.set(x, 2, z);
+  pole.castShadow = true;
+  scene.add(pole);
+  const lamp = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 12, 12),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2 })
+  );
+  lamp.position.set(x, 4.2, z);
+  scene.add(lamp);
+}
+buildSignal(-60, -30, 0x22c55e);
+buildSignal(60, 30, 0xef4444);
+buildSignal(0, -10, 0x22c55e);
+
+// ============ GRAPH ============
+const graph = { nodes: {}, edges: [] };
+const nodeKey = (x, z) => `${x.toFixed(1)}|${z.toFixed(1)}`;
+
+function projectOnGleis(pt, g) {
+  const [x1, z1] = g.start, [x2, z2] = g.end;
+  const dx = x2-x1, dz = z2-z1;
+  const t = ((pt[0]-x1)*dx + (pt[1]-z1)*dz) / (dx*dx + dz*dz);
+  return [x1 + t*dx, z1 + t*dz];
+}
+
+function buildGraph() {
+  const pts = {};
+  GLEISE.forEach(g => {
+    pts[g.id] = new Set([nodeKey(...g.start), nodeKey(...g.end)]);
+  });
+  WEICHEN.forEach(w => {
+    [w.from, w.to].forEach(gid => {
+      const g = GLEISE.find(x => x.id === gid);
+      if (!g) return;
+      const p = projectOnGleis(w.at, g);
+      pts[gid].add(nodeKey(p[0], p[1]));
+    });
+  });
+  GLEISE.forEach(g => {
+    const arr = Array.from(pts[g.id]).map(k => k.split('|').map(Number))
+      .sort((a, b) => ((a[0]-g.start[0])/((g.end[0]-g.start[0])||1)) - ((b[0]-g.start[0])/((g.end[0]-g.start[0])||1)));
+    for (let i = 0; i < arr.length - 1; i++) {
+      const a = arr[i], b = arr[i+1];
+      const ka = `${g.id}:${nodeKey(...a)}`;
+      const kb = `${g.id}:${nodeKey(...b)}`;
+      graph.nodes[ka] = { id: ka, pos: a, gleis: g.id };
+      graph.nodes[kb] = { id: kb, pos: b, gleis: g.id };
+      graph.edges.push({ from: ka, to: kb, gleis: g.id, length: Math.hypot(b[0]-a[0], b[1]-a[1]) });
+    }
+  });
+  WEICHEN.forEach(w => {
+    const gA = GLEISE.find(x => x.id === w.from);
+    const gB = GLEISE.find(x => x.id === w.to);
+    if (!gA || !gB) return;
+    const pA = projectOnGleis(w.at, gA), pB = projectOnGleis(w.at, gB);
+    const kA = `${gA.id}:${nodeKey(...pA)}`, kB = `${gB.id}:${nodeKey(...pB)}`;
+    if (graph.nodes[kA] && graph.nodes[kB]) {
+      graph.edges.push({ from: kA, to: kB, gleis: w.id, weiche: w.id, length: Math.hypot(pB[0]-pA[0], pB[1]-pA[1]) });
+    }
+  });
+}
+buildGraph();
+
+// ============ DIJKSTRA ============
+function findPath(startId, endId) {
+  const sg = GLEISE.find(x => x.id === startId);
+  const eg = GLEISE.find(x => x.id === endId);
+  if (!sg || !eg) return null;
+  const startNodes = Object.values(graph.nodes).filter(n => n.gleis === startId);
+  const endNodes = Object.values(graph.nodes).filter(n => n.gleis === endId);
+  if (!startNodes.length || !endNodes.length) return null;
+  const start = startNodes.sort((a, b) => b.pos[0] - a.pos[0])[0];
+  const end = endNodes.sort((a, b) => a.pos[0] - b.pos[0])[0];
+  if (start.gleis === end.gleis) {
+    return { nodes: [start, end], edges: [], totalLength: Math.hypot(end.pos[0]-start.pos[0], end.pos[1]-start.pos[1]) };
+  }
+  const dist = {}, prev = {};
+  Object.keys(graph.nodes).forEach(k => dist[k] = Infinity);
+  dist[start.id] = 0;
+  const visited = new Set();
+  const queue = [start.id];
+  while (queue.length) {
+    queue.sort((a, b) => dist[a] - dist[b]);
+    const u = queue.shift();
+    if (visited.has(u)) continue;
+    visited.add(u);
+    if (u === end.id) break;
+    graph.edges.forEach(e => {
+      let v = e.from === u ? e.to : e.to === u ? e.from : null;
+      if (!v) return;
+      const nd = dist[u] + e.length;
+      if (nd < dist[v]) { dist[v] = nd; prev[v] = { from: u, edge: e }; queue.push(v); }
+    });
+  }
+  if (dist[end.id] === Infinity) return null;
+  const path = [];
+  let cur = end.id;
+  while (cur && cur !== start.id) {
+    const p = prev[cur];
+    if (!p) break;
+    path.unshift({ node: graph.nodes[cur], edge: p.edge });
+    cur = p.from;
+  }
+  path.unshift({ node: graph.nodes[start.id], edge: null });
+  return { nodes: path.map(p => p.node), edges: path.slice(1).map(p => p.edge), totalLength: dist[end.id] };
+}
+
+// ============ ROUTE VISUAL ============
+const routeGroup = new THREE.Group();
+const doneGroup = new THREE.Group();
+scene.add(routeGroup, doneGroup);
+const routeMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x0b3d1f, emissiveIntensity: 0.8 });
+const doneMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x0a1f4d, emissiveIntensity: 0.8 });
+let currentRoute = null;
+let routePoints = [];
+const clearGroup = g => { while (g.children.length) { const m = g.children[0]; m.geometry?.dispose(); g.remove(m); } };
+
+function drawRoute(path) {
+  clearGroup(routeGroup); clearGroup(doneGroup);
+  const pts = [new THREE.Vector3(path.nodes[0].pos[0], 0.6, path.nodes[0].pos[1])];
+  path.nodes.slice(1).forEach(n => pts.push(new THREE.Vector3(n.pos[0], 0.6, n.pos[1])));
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i+1];
+    const len = a.distanceTo(b);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, 0.15, 0.9), routeMat);
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+    routeGroup.add(mesh);
+  }
+  routePoints = pts;
+  currentRoute = path;
+}
+
+// ============ LOCO ============
+const loco = new THREE.Group();
+scene.add(loco);
+loco.visible = false;
+(function buildLoco() {
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.4, roughness: 0.5 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.6, roughness: 0.5 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, metalness: 0.2, roughness: 0.1, transparent: true, opacity: 0.7 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(6, 2.2, 2.6), bodyMat);
+  body.position.y = 1.6; body.castShadow = true; loco.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 2.4), bodyMat);
+  cab.position.set(-1.5, 3.4, 0); cab.castShadow = true; loco.add(cab);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.7, 2.45), glassMat);
+  win.position.set(-1.5, 3.5, 0); loco.add(win);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.15, 2.5), darkMat);
+  roof.position.set(-1.5, 4.15, 0); loco.add(roof);
+  const wg = new THREE.CylinderGeometry(0.55, 0.55, 0.25, 16);
+  [[-1.6,0.55,-1.3],[-1.6,0.55,1.3],[1.6,0.55,-1.3],[1.6,0.55,1.3]].forEach(([x,y,z]) => {
+    const w = new THREE.Mesh(wg, darkMat);
+    w.rotation.x = Math.PI/2; w.position.set(x, y, z); w.castShadow = true; loco.add(w);
+  });
+  const lm = new THREE.MeshStandardMaterial({ color: 0xfff3d6, emissive: 0xfff3d6, emissiveIntensity: 2 });
+  [[-2.6,2.4,0.9],[-2.6,2.4,-0.9]].forEach(([x,y,z]) => {
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), lm);
+    l.position.set(x, y, z); loco.add(l);
+  });
+})();
+
+// ============ SIM ============
+const sim = { active: false, progress: 0, speed: 1, currentStepIdx: 0 };
+
+function updateLocoAlongRoute(p) {
+  if (!routePoints.length) return;
+  const n = routePoints.length - 1;
+  const seg = Math.min(Math.floor(p * n), n - 1);
+  const t = p * n - seg;
+  const a = routePoints[seg], b = routePoints[seg + 1];
+  loco.position.lerpVectors(a, b, t);
+  const dir = new THREE.Vector3().subVectors(b, a).normalize();
+  loco.rotation.y = -Math.atan2(dir.z, dir.x);
+}
+
+function updateDoneRoute(p) {
+  clearGroup(doneGroup);
+  if (!routePoints.length || p <= 0) return;
+  const n = routePoints.length - 1;
+  const maxSeg = Math.floor(p * n);
+  const t = p * n - maxSeg;
+  for (let i = 0; i < maxSeg; i++) drawDoneSeg(routePoints[i], routePoints[i+1], 1);
+  if (maxSeg < n) drawDoneSeg(routePoints[maxSeg], routePoints[maxSeg+1], t);
+}
+function drawDoneSeg(a, b, t) {
+  const end = new THREE.Vector3().lerpVectors(a, b, t);
+  const len = a.distanceTo(end);
+  if (len < 0.01) return;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 1.1), doneMat);
+  mesh.position.copy(a).add(end).multiplyScalar(0.5);
+  mesh.rotation.y = -Math.atan2(end.z - a.z, end.x - a.x);
+  doneGroup.add(mesh);
+}
+
+// ============ NAV STEPS ============
+let navSteps = [];
+function generateNavSteps(path) {
+  navSteps = [];
+  const sg = GLEISE.find(g => g.id === path.nodes[0].gleis);
+  navSteps.push({ text: `Start auf ${sg.nummer}`, type: 'start' });
+  let lastGleis = path.nodes[0].gleis;
+  for (let i = 0; i < path.edges.length; i++) {
+    const e = path.edges[i];
+    if (e.weiche) {
+      const w = WEICHEN.find(x => x.id === e.weiche);
+      const toG = GLEISE.find(x => x.id === path.nodes[i+1].gleis);
+      navSteps.push({ text: `Weiche ${w.nummer}: Fahrt nach ${toG?.nummer || ''}`, type: 'weiche' });
+    } else if (e.gleis !== lastGleis) {
+      const g = GLEISE.find(x => x.id === e.gleis);
+      navSteps.push({ text: `Einfahrt ${g.nummer}`, type: 'gleis' });
+      lastGleis = e.gleis;
+    }
+  }
+  const eg = GLEISE.find(g => g.id === path.nodes[path.nodes.length - 1].gleis);
+  navSteps.push({ text: `Ziel erreicht: ${eg.nummer}`, type: 'end' });
+}
+
+function renderNavSteps() {
+  const el = document.getElementById('navSteps');
+  el.innerHTML = '';
+  navSteps.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'step' + (i === sim.currentStepIdx ? ' active' : '') + (i < sim.currentStepIdx ? ' done' : '');
+    d.innerHTML = `<span class="idx">${i+1}.</span><span>${s.text}</span>`;
+    el.appendChild(d);
+  });
+  const cur = navSteps[sim.currentStepIdx];
+  document.getElementById('navStatus').textContent = cur ? cur.text : '';
+}
+
+function updateStepFromProgress() {
+  const n = navSteps.length - 1;
+  const idx = n > 0 ? Math.min(n, Math.round(sim.progress * n)) : 0;
+  if (idx !== sim.currentStepIdx) { sim.currentStepIdx = idx; renderNavSteps(); }
+}
+
+// ============ UI ============
+const startSel = document.getElementById('startSelect');
+const endSel = document.getElementById('endSelect');
+GLEISE.forEach(g => {
+  const o1 = new Option(g.nummer, g.id);
+  const o2 = new Option(g.nummer, g.id);
+  startSel.appendChild(o1); endSel.appendChild(o2);
+});
+startSel.value = 'G1';
+endSel.value = 'G7';
+
+let cameraMode = 'iso';
+const followOffset = new THREE.Vector3(15, 12, 15);
+
+document.getElementById('btnRoute').onclick = () => {
+  const s = startSel.value, e = endSel.value;
+  if (s === e) { alert('Start und Ziel müssen unterschiedlich sein.'); return; }
+  const path = findPath(s, e);
+  if (!path) { alert('Kein Pfad gefunden.'); return; }
+  drawRoute(path);
+  generateNavSteps(path);
+  sim.currentStepIdx = 0; sim.progress = 0; sim.active = false;
+  loco.visible = true;
+  updateLocoAlongRoute(0);
+  updateDoneRoute(0);
+  document.getElementById('navPanel').classList.remove('hidden');
+  renderNavSteps();
+  updateStepFromProgress();
+  document.getElementById('navStatus').textContent = `Route: ${path.totalLength.toFixed(1)} m`;
+};
+
+document.getElementById('btnReset').onclick = () => {
+  clearGroup(routeGroup); clearGroup(doneGroup);
+  loco.visible = false;
+  currentRoute = null; routePoints = [];
+  sim.active = false; sim.progress = 0;
+  document.getElementById('navPanel').classList.add('hidden');
+};
+
+document.getElementById('btnSim').onclick = () => {
+  if (!currentRoute) return;
+  sim.active = true;
+  document.getElementById('navStatus').textContent = 'Simulation läuft…';
+};
+
+document.getElementById('btnStop').onclick = () => {
+  sim.active = false;
+  document.getElementById('navStatus').textContent = 'Gestoppt.';
+};
+
+document.getElementById('btnPrev').onclick = () => {
+  if (!currentRoute) return;
+  sim.active = false;
+  const n = navSteps.length - 1;
+  if (n === 0) return;
+  sim.progress = Math.max(0, sim.progress - 1/n);
+  updateLocoAlongRoute(sim.progress);
+  updateDoneRoute(sim.progress);
+  updateStepFromProgress();
+};
+
+document.getElementById('btnNext').onclick = () => {
+  if (!currentRoute) return;
+  sim.active = false;
+  const n = navSteps.length - 1;
+  if (n === 0) return;
+  sim.progress = Math.min(1, sim.progress + 1/n);
+  updateLocoAlongRoute(sim.progress);
+  updateDoneRoute(sim.progress);
+  updateStepFromProgress();
+};
+
+document.getElementById('speedRange').oninput = e => sim.speed = parseFloat(e.target.value);
+
+function setCamMode(mode) {
+  cameraMode = mode;
+  if (mode === 'iso') {
+    controls.enabled = true;
+    camera.position.set(60, 60, 80);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  } else if (mode === 'top') {
+    controls.enabled = true;
+    camera.position.set(0, 140, 0.01);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  } else if (mode === 'follow') {
+    controls.enabled = false;
+  }
+}
+document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => setCamMode(b.dataset.cam));
+
+let technical = false;
+document.getElementById('btnRealistic').onclick = () => {
+  technical = false;
+  document.getElementById('btnRealistic').classList.add('active');
+  document.getElementById('btnTechnical').classList.remove('active');
+  applyView();
+};
+document.getElementById('btnTechnical').onclick = () => {
+  technical = true;
+  document.getElementById('btnTechnical').classList.add('active');
+  document.getElementById('btnRealistic').classList.remove('active');
+  applyView();
+};
+function applyView() {
+  if (technical) {
+    scene.background = new THREE.Color(0x0a0f14);
+    ground.material.color.set(0x0a0f14);
+    railMaterial.color.set(0x5aa9ff);
+    railMaterial.emissive.set(0x0a2540);
+    railMaterial.emissiveIntensity = 0.5;
+    weicheMat.emissiveIntensity = 1.5;
+  } else {
+    scene.background = new THREE.Color(0x0e1116);
+    ground.material.color.set(0x1c232c);
+    railMaterial.color.set(0x8a96a3);
+    railMaterial.emissive.set(0x000000);
+    railMaterial.emissiveIntensity = 0;
+    weicheMat.emissiveIntensity = 0.5;
+  }
+}
+
+// ============ LOOP ============
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  if (sim.active && currentRoute) {
+    const sp = 12 * sim.speed;
+    sim.progress += (sp * dt) / Math.max(currentRoute.totalLength, 1);
+    if (sim.progress >= 1) {
+      sim.progress = 1;
+      sim.active = false;
+      document.getElementById('navStatus').textContent = 'Ziel erreicht.';
+    }
+    updateLocoAlongRoute(sim.progress);
+    updateDoneRoute(sim.progress);
+    updateStepFromProgress();
+  }
+  if (cameraMode === 'follow' && loco.visible) {
+    camera.position.lerp(loco.position.clone().add(followOffset), 0.1);
+    controls.target.lerp(loco.position, 0.15);
+    camera.lookAt(loco.position);
+  } else {
+    controls.update();
+  }
+  const t = performance.now() * 0.002;
+  Object.values(weicheMeshes).forEach((m, i) => m.scale.setScalar(1 + Math.sin(t + i) * 0.15));
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+requestAnimationFrame(() => {
+  const ld = document.getElementById('loading');
+  ld.classList.add('fade');
+  setTimeout(() => ld.remove(), 500);
+});
+animate();
+</script>
+</body>
+</html>
